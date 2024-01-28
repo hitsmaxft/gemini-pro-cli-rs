@@ -1,11 +1,13 @@
-use clap::{App, Arg, ArgMatches, Error};
+use clap::{App, Arg, ArgMatches};
 use serde::{Deserialize, Serialize};
-use log::warn;
+use log::{warn, info};
+use env_logger::Env;
 //use std::env;
 
+
 use google_generative_ai_rs::v1::{
-    api::{Client, PostResult},
-    gemini::{request::Request, Content, Part, Role},
+    api::{Client},
+    gemini::{request::Request, response::Candidate, Content, Part, Role},
 };
 
 #[derive(Serialize, Deserialize)]
@@ -29,6 +31,12 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>>  {
     });
 
     let config_path = matches.value_of("config-file").unwrap_or("~/.config/gemini.toml");
+
+    let stream = match matches.value_of("stream").unwrap() {
+        "true" => true,
+        _ => false
+    }
+
     let config = read_config(config_path)?;
 
     let token = matches
@@ -36,7 +44,10 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>>  {
         .or_else(|| Some(config.token.as_str()))
         .expect("No token provided. Please use --token or configure in the TOML file.");
 
-    let client = Client::new_from_model(google_generative_ai_rs::v1::gemini::Model::GeminiPro, token.to_string());
+    let client = match stream {
+        true => Client::new_from_model_reponse_type(google_generative_ai_rs::v1::gemini::Model::GeminiPro, token.to_string(), google_generative_ai_rs::v1::gemini::ResponseType::StreamGenerateContent) ,
+        _ => Client::new_from_model(google_generative_ai_rs::v1::gemini::Model::GeminiPro, token.to_string()),
+    }
 
     let txt_request = Request {
         contents: vec![Content {
@@ -48,6 +59,7 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>>  {
                 video_metadata: None,
             }],
         }],
+
         tools: vec![],
         safety_settings: vec![],
         generation_config: None,
@@ -55,21 +67,43 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>>  {
 
     let response = client.post(30, &txt_request).await?;
 
-    let rest_response = response.rest();
+    match stream {
+        true => {
+             match response.streamed() {
+                Some(gemini) => ,
 
-    if rest_response.is_some() {
-        warn!("{:#?}", rest_response.unwrap().candidates);
+                _=> print!("empty response")
+            },
+
     }
-    // Print the response
-    // for content in response {
-    //    println!("{}", content);
-    //}
+        },
+        _=> {
+             match response.rest() {
+        Some(gemini) => 
+            match &(gemini.candidates[0].content.parts[0].text) {
+                Some(text) =>
+                    print!("{}", text.to_string()),
+                    _=>
+                    print!("{}", "text is empty"),
+            }
+        _=> print!("empty response")
+
+    }
+},
+
+    }
 
     Ok(())
 }
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let env = Env::default()
+    .filter_or("MY_LOG_LEVEL", "warn")
+    .write_style_or("MY_LOG_STYLE", "always");
+
+    env_logger::init_from_env(env);
+
     let matches = App::new("Gemini CLI")
         .version("0.1.0")
         .author("Your Name")
