@@ -474,6 +474,7 @@ dependencies = [
  "anyhow",
  "clap",
  "env_logger 0.11.1",
+ "futures",
  "google-generative-ai-rs",
  "log",
  "serde",
