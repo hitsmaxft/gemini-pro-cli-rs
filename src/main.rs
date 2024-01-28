@@ -1,12 +1,11 @@
 use clap::{App, Arg, ArgMatches};
-use serde::{Deserialize, Serialize};
-use log::{warn, info};
 use env_logger::Env;
+use log::{info, warn};
+use serde::{Deserialize, Serialize};
 //use std::env;
 
-
 use google_generative_ai_rs::v1::{
-    api::{Client},
+    api::Client,
     gemini::{request::Request, response::Candidate, Content, Part, Role},
 };
 
@@ -23,19 +22,21 @@ fn read_config(file_path: &str) -> Result<Config, Box<dyn std::error::Error>> {
 }
 
 #[tokio::main]
-async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>>  {
-        // Parse command-line arguments
+async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+    // Parse command-line arguments
     let prompt = matches.value_of("prompt").unwrap_or_else(|| {
         eprintln!("No prompt provided. Please use --prompt to specify the prompt.");
         std::process::exit(1);
     });
 
-    let config_path = matches.value_of("config-file").unwrap_or("~/.config/gemini.toml");
+    let config_path = matches
+        .value_of("config-file")
+        .unwrap_or("~/.config/gemini.toml");
 
-    let stream = match matches.value_of("stream").unwrap() {
-        "true" => true,
-        _ => false
-    }
+    let stream = match matches.value_of("stream") {
+        Some("true") => true,
+        _ => false,
+    };
 
     let config = read_config(config_path)?;
 
@@ -45,9 +46,16 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>>  {
         .expect("No token provided. Please use --token or configure in the TOML file.");
 
     let client = match stream {
-        true => Client::new_from_model_reponse_type(google_generative_ai_rs::v1::gemini::Model::GeminiPro, token.to_string(), google_generative_ai_rs::v1::gemini::ResponseType::StreamGenerateContent) ,
-        _ => Client::new_from_model(google_generative_ai_rs::v1::gemini::Model::GeminiPro, token.to_string()),
-    }
+        true => Client::new_from_model_reponse_type(
+            google_generative_ai_rs::v1::gemini::Model::GeminiPro,
+            token.to_string(),
+            google_generative_ai_rs::v1::gemini::ResponseType::StreamGenerateContent,
+        ),
+        _ => Client::new_from_model(
+            google_generative_ai_rs::v1::gemini::Model::GeminiPro,
+            token.to_string(),
+        ),
+    };
 
     let txt_request = Request {
         contents: vec![Content {
@@ -68,39 +76,31 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>>  {
     let response = client.post(30, &txt_request).await?;
 
     match stream {
-        true => {
-             match response.streamed() {
-                Some(gemini) => ,
-
-                _=> print!("empty response")
-            },
-
-    }
+        true => match response.streamed() {
+            Some(mut gemini) => gemini.streamed_candidates.iter_mut().for_each(|gemini| {
+                match &(gemini.candidates[0].content.parts[0].text) {
+                    Some(text) => print!("{}", text.to_string()),
+                    _ => print!("{}", "text is empty"),
+                }
+            }),
+            _ => print!("empty response"),
         },
-        _=> {
-             match response.rest() {
-        Some(gemini) => 
-            match &(gemini.candidates[0].content.parts[0].text) {
-                Some(text) =>
-                    print!("{}", text.to_string()),
-                    _=>
-                    print!("{}", "text is empty"),
-            }
-        _=> print!("empty response")
-
-    }
-},
-
+        _ => match response.rest() {
+            Some(gemini) => match &(gemini.candidates[0].content.parts[0].text) {
+                Some(text) => print!("{}", text.to_string()),
+                _ => print!("{}", "text is empty"),
+            },
+            _ => print!("empty response"),
+        },
     }
 
     Ok(())
 }
 
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let env = Env::default()
-    .filter_or("MY_LOG_LEVEL", "warn")
-    .write_style_or("MY_LOG_STYLE", "always");
+        .filter_or("MY_LOG_LEVEL", "warn")
+        .write_style_or("MY_LOG_STYLE", "always");
 
     env_logger::init_from_env(env);
 
