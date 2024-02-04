@@ -9,12 +9,17 @@ edition = "2021"
 clap = "3.1.0"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.5.8"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.0", features = ["full", "time"] }
 anyhow = "1.0"
 thiserror = "1.0"
-google-generative-ai-rs = "0.1.7"
 log = "0.4.20"
 serde_json = "1.0.112"
 env_logger = "0.11.1"
 futures = "0.3.30"
+shellexpand = "3.1.0"
+tokio-stream = "0.1.14"
 
+[dependencies.google-generative-ai-rs]
+
+git = "https://github.com/hitsmaxft/google-generative-ai-rs.git"
+branch = "streaming"

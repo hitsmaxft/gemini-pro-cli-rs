@@ -1,0 +1,12 @@
+token= ""
+
+model = "gemini-pro"
+template = "Context: {system}\nMessages:\nAuthor: User\nContent: {prompt}"
+stream=true
+markdown=true
+
+generation_config={}
+
+[code]
+model = "code-bison"
+
