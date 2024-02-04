@@ -28,13 +28,13 @@ async fn read_config(input: &str) -> Result<Config, Box<dyn std::error::Error>> 
 }
 
 async fn output_response(gemini: &GeminiResponse) -> String {
-    if gemini.candidates.len() == 0 {
+    if gemini.candidates.is_empty() {
         return "".to_string();
     }
 
     let first_candi: &Candidate = &gemini.candidates[0];
 
-    if first_candi.content.parts.len() == 0 {
+    if first_candi.content.parts.is_empty() {
         return "".to_string();
     }
 
@@ -79,7 +79,7 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
 
     let token = matches
         .value_of("token")
-        .or_else(|| Some(config.token.as_str()))
+        .or(Some(config.token.as_str()))
         .expect("No token provided. Please use --token or configure in the TOML file.");
 
     let client = match is_stream {
@@ -123,15 +123,13 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
                 .await
             }
         }
-    } else {
-        if let Some(gemini) = response.rest() {
-            if let Some(text) = &gemini
-                .candidates
-                .get(0)
-                .and_then(|c| c.content.parts.get(0).and_then(|p| p.text.as_ref()))
-            {
-                print!("{}", text);
-            }
+    } else if let Some(gemini) = response.rest() {
+        if let Some(text) = &gemini
+            .candidates
+            .first()
+            .and_then(|c| c.content.parts.first().and_then(|p| p.text.as_ref()))
+        {
+            print!("{}", text);
         }
     }
 
