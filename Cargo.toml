@@ -24,6 +24,8 @@ tokio-stream = "0.1.14"
 git = "https://github.com/hitsmaxft/google-generative-ai-rs.git"
 branch = "streaming"
 
+
 [package.metadata.scripts]
 check = "cargo clippy --all-targets --all-features -- -D warnings"
+
 
