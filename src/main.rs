@@ -13,6 +13,12 @@ use tokio::sync::Mutex; // 注意：我们使用的是tokio的Mutex，它对异�
 
 use google_generative_ai_rs::v1::api::Client;
 
+
+struct StreamCtx<'a> {
+    pub skin: &'a MadSkin,
+    pub buffer: &'a String,
+}
+
 async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     let env = Env::default()
         .filter_or(
@@ -84,18 +90,28 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
         info!("output in markdown\n");
     }
 
-    let skin_= Arc::new(Mutex::new(skin));
+    let buffer = String::new();
 
     if is_stream {
         info!("streaming output");
         if let Some(stream_response) = response.streamed() {
             if let Some(json_stream) = stream_response.response_stream {
+
+            let holder = Arc::new(Mutex::new(StreamCtx {
+                skin: &skin,
+                buffer: &buffer,
+            }));
+            {
+
                 Client::for_each_async(json_stream, move |gr: GeminiResponse| {
-                    let skin = Arc::clone(&skin_);
+                    let holder = Arc::clone(&holder);
                     async move {
+
                         if let Some(tx) = cli::get_text(&gr) {
                             if is_rich {
-                                let skin = skin.lock().await;
+                                let holder = holder.lock().await;
+                                let skin = holder.skin;
+                                let _buffer = holder.buffer;
                                 skin.print_text(tx);
                             } else {
                                 let _ = stdout().write_all(tx.as_bytes()).await;
@@ -106,6 +122,7 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
                     }
                 })
                 .await
+            }
             }
         }
     } else if let Some(gemini) = response.rest() {
