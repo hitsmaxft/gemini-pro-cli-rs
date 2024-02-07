@@ -2,11 +2,8 @@
 use gemini_pro_cli::cli;
 use clap::ArgMatches;
 use env_logger::Env;
+use gemini_pro_cli::llm;
 use google_generative_ai_rs::v1::gemini::response::GeminiResponse;
-use google_generative_ai_rs::v1::gemini::request::Request;
-use google_generative_ai_rs::v1::gemini::Content;
-use google_generative_ai_rs::v1::gemini::Role;
-use google_generative_ai_rs::v1::gemini::Part;
 use log::info;
 use std::io::{stdin, Read};
 
@@ -66,24 +63,12 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
         ),
     };
 
-    let txt_request = Request {
-        contents: vec![Content {
-            role: Role::User,
-            parts: vec![Part {
-                text: Some(prompt),
-                inline_data: None,
-                file_data: None,
-                video_metadata: None,
-            }],
-        }],
-
-        tools: vec![],
-        safety_settings: vec![],
-        //TODO read from config
-        generation_config: None,
-    };
-
-    let response = client.post(30, &txt_request).await?;
+    let response = llm::request(client, llm::LLMRequest {
+        stream : is_stream,
+        rich : is_rich,
+        token : token,
+        prompt : Some(prompt),
+    }).await?;
 
     if is_stream {
         info!("streaming output");
@@ -99,7 +84,8 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(text) = &gemini
             .candidates
             .first()
-            .and_then(|c| c.content.parts.first().and_then(|p| p.text.as_ref()))
+            .and_then(|c| c.content.parts.first()
+            .and_then(|p| p.text.as_ref()))
         {
             if is_rich {
                 termimad::print_inline(text);
