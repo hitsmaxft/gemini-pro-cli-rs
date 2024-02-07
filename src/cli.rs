@@ -68,6 +68,11 @@ pub fn create_cli_app() -> App<'static>{
                 .help("output more logs"),
         )
         .arg(
+            Arg::with_name("rich")
+                .long("rich")
+                .help("output the response in rich terminal"),
+        )
+        .arg(
             Arg::with_name("stream")
                 .long("stream")
                 .help("Streams the response from the model"),

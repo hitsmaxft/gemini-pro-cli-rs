@@ -46,6 +46,7 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or("~/.config/gemini-cli.toml");
 
     let is_stream = matches.contains_id("stream");
+    let is_rich = matches.contains_id("rich");
     let config = cli::read_config(config_path).await?;
 
     let token = matches
@@ -100,7 +101,11 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
             .first()
             .and_then(|c| c.content.parts.first().and_then(|p| p.text.as_ref()))
         {
-            print!("{}", text);
+            if is_rich {
+                termimad::print_inline(text);
+            } else {
+                println!("{}", text);
+            }
         }
     }
 

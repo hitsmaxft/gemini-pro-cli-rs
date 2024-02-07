@@ -19,6 +19,7 @@ futures = "0.3.30"
 shellexpand = "3.1.0"
 tokio-stream = "0.1.14"
 clap-stdin = "0.4.0"
+termimad = "0.29.0"
 
 [dependencies.google-generative-ai-rs]
 
