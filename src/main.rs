@@ -1,4 +1,3 @@
-
 use gemini_pro_cli::cli;
 use clap::ArgMatches;
 use env_logger::Env;
@@ -6,6 +5,11 @@ use gemini_pro_cli::llm;
 use google_generative_ai_rs::v1::gemini::response::GeminiResponse;
 use log::info;
 use std::io::{stdin, Read};
+use tokio::io::{stdout, AsyncWriteExt};
+use termimad::crossterm::style::{Attribute::*, Color::*};
+use termimad::*;
+use std::sync::Arc;
+use tokio::sync::Mutex; // 注意：我们使用的是tokio的Mutex，它对异步代码友好
 
 use google_generative_ai_rs::v1::api::Client;
 
@@ -70,12 +74,36 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
         prompt : Some(prompt),
     }).await?;
 
+
+    let mut skin = MadSkin::default();
+    skin.bold.set_fg(Yellow);
+    skin.paragraph.set_fgbg(Magenta, rgb(30, 30, 40));
+    skin.italic.add_attr(Underlined);
+
+    if is_rich {
+        info!("output in markdown\n");
+    }
+
+    let skin_= Arc::new(Mutex::new(skin));
+
     if is_stream {
         info!("streaming output");
         if let Some(stream_response) = response.streamed() {
             if let Some(json_stream) = stream_response.response_stream {
-                Client::for_each_async(json_stream, move |gr: GeminiResponse| async move {
-                    cli::output_response(&gr).await;
+                Client::for_each_async(json_stream, move |gr: GeminiResponse| {
+                    let skin = Arc::clone(&skin_);
+                    async move {
+                        if let Some(tx) = cli::get_text(&gr) {
+                            if is_rich {
+                                let skin = skin.lock().await;
+                                skin.print_text(tx);
+                            } else {
+                                let _ = stdout().write_all(tx.as_bytes()).await;
+                                let _ = stdout().flush().await;
+
+                            }
+                        }
+                    }
                 })
                 .await
             }

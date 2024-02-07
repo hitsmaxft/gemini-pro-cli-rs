@@ -8,6 +8,20 @@ use tokio::io::{stdout, AsyncWriteExt};
 use google_generative_ai_rs::v1::gemini::response::{Candidate, GeminiResponse};
 use google_generative_ai_rs::v1::gemini::Part;
 
+pub fn get_text(gemini: &GeminiResponse) -> Option<&String> {
+    if gemini.candidates.is_empty() {
+        return None;
+    }
+
+    let first_candi: &Candidate = &gemini.candidates[0];
+
+    if first_candi.content.parts.is_empty() {
+        return None;
+    }
+
+    let first_part: &Part = &first_candi.content.parts[0];
+    return first_part.text.as_ref();
+}
 pub async fn output_response(gemini: &GeminiResponse) -> String {
     if gemini.candidates.is_empty() {
         return "".to_string();
