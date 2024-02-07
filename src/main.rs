@@ -1,55 +1,16 @@
-extern crate shellexpand; // 1.0.0
 
-use clap::{App, Arg, ArgMatches};
+use gemini_pro_cli::cli;
+use clap::ArgMatches;
 use env_logger::Env;
-use google_generative_ai_rs::v1::gemini::response::{Candidate, GeminiResponse};
+use google_generative_ai_rs::v1::gemini::response::GeminiResponse;
+use google_generative_ai_rs::v1::gemini::request::Request;
+use google_generative_ai_rs::v1::gemini::Content;
+use google_generative_ai_rs::v1::gemini::Role;
+use google_generative_ai_rs::v1::gemini::Part;
 use log::info;
-use serde::{Deserialize, Serialize};
-use std::io::{stdout, Write};
+use std::io::{stdin, Read};
 
-use google_generative_ai_rs::v1::{
-    api::Client,
-    gemini::{request::Request, Content, Part, Role},
-};
-
-#[derive(Serialize, Deserialize)]
-struct Config {
-    token: String,
-    generation_config: std::collections::HashMap<String, serde_json::Value>,
-}
-
-async fn read_config(input: &str) -> Result<Config, Box<dyn std::error::Error>> {
-    let real_path: &str = &shellexpand::tilde(input);
-
-    info!("final config file path is {}", real_path);
-    let contents = tokio::fs::read_to_string(real_path).await?;
-    let config: Config = toml::from_str(&contents)?;
-    Ok(config)
-}
-
-async fn output_response(gemini: &GeminiResponse) -> String {
-    if gemini.candidates.is_empty() {
-        return "".to_string();
-    }
-
-    let first_candi: &Candidate = &gemini.candidates[0];
-
-    if first_candi.content.parts.is_empty() {
-        return "".to_string();
-    }
-
-    let first_part: &Part = &first_candi.content.parts[0];
-    let may_text: &Option<String> = &first_part.text;
-
-    match may_text {
-        Some(text) => {
-            let mut lock = stdout().lock();
-            let _ = write!(lock, "{}", text);
-            "".to_string()
-        }
-        _ => "".to_string(),
-    }
-}
+use google_generative_ai_rs::v1::api::Client;
 
 async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     let env = Env::default()
@@ -65,8 +26,18 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init_from_env(env);
 
     // Parse command-line arguments
-    let prompt = matches.value_of("prompt").unwrap_or_else(|| {
-        eprintln!("No prompt provided. Please use --prompt to specify the prompt.");
+    let prompt : String = (if let Some(p) = matches.value_of("prompt") {
+        Some(p.to_string())
+    } else {
+        let mut buffer = String::new();
+        if stdin().read_to_string(&mut buffer).is_ok() {
+            Some(buffer.trim_end().to_string()) 
+        } else {
+            None
+        }
+    })
+    .unwrap_or_else(|| {
+        eprintln!("No prompt provided. Please use --prompt to specify the prompt or stdin");
         std::process::exit(1);
     });
 
@@ -75,7 +46,7 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or("~/.config/gemini-cli.toml");
 
     let is_stream = matches.contains_id("stream");
-    let config = read_config(config_path).await?;
+    let config = cli::read_config(config_path).await?;
 
     let token = matches
         .value_of("token")
@@ -98,7 +69,7 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
         contents: vec![Content {
             role: Role::User,
             parts: vec![Part {
-                text: Some(prompt.to_string()),
+                text: Some(prompt),
                 inline_data: None,
                 file_data: None,
                 video_metadata: None,
@@ -118,7 +89,7 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(stream_response) = response.streamed() {
             if let Some(json_stream) = stream_response.response_stream {
                 Client::for_each_async(json_stream, move |gr: GeminiResponse| async move {
-                    output_response(&gr).await;
+                    cli::output_response(&gr).await;
                 })
                 .await
             }
@@ -138,46 +109,12 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Define the interval duration
 
-    let matches = App::new("Gemini CLI")
-        .version("0.1.0")
-        .author("Your Name")
-        .about("Interacts with the Gemini model")
-        .arg(
-            Arg::with_name("prompt")
-                .long("prompt")
-                .value_name("PROMPT")
-                .help("Sets the prompt for the Gemini model")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("verbose")
-                .short('v')
-                .long("verbose")
-                .help("output more logs"),
-        )
-        .arg(
-            Arg::with_name("stream")
-                .long("stream")
-                .help("Streams the response from the model"),
-        )
-        .arg(
-            Arg::with_name("config-file")
-                .short('f')
-                .long("config-file")
-                .value_name("FILE")
-                .help("Specify a custom TOML file for configuration")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("token")
-                .long("token")
-                .value_name("TOKEN")
-                .help("Specify the API token directly")
-                .takes_value(true),
-        )
-        .get_matches();
+    // read input from stdin
+    // let mut buffer = String::new();
+	// io::stdin().read_line(&mut buffer).unwrap();
+	// let strings = string_to_args(&buffer);
+    let matches:ArgMatches = cli::create_cli_app().get_matches();
 
     run(matches).await
 }

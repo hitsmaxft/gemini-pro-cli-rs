@@ -220,6 +220,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap-stdin"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc126d12a0930c94c3548581294d5f19360ac02e408600b4d7619d7234e8b505"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "clap_lex"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -501,11 +510,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "gemini-cli-rs"
+name = "gemini-pro-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "clap-stdin",
  "env_logger",
  "futures",
  "google-generative-ai-rs",
