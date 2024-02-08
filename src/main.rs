@@ -4,19 +4,22 @@ use env_logger::Env;
 use gemini_pro_cli::llm;
 use google_generative_ai_rs::v1::gemini::response::GeminiResponse;
 use log::info;
-use std::io::{stdin, Read};
-use tokio::io::{stdout, AsyncWriteExt};
-use termimad::crossterm::style::{Attribute::*, Color::*};
-use termimad::*;
+use std::io::{stdin, Read, Write};
+use tokio::io::{AsyncWriteExt};
+//use termimad::crossterm::style::{Attribute::*, Color::*};
+use termimad::crossterm::{cursor, ExecutableCommand};
+use termimad::{FmtText, MadSkin};
+use termimad::crossterm::terminal::Clear;
+use termimad::crossterm::terminal::ClearType::FromCursorDown;
 use std::sync::Arc;
 use tokio::sync::Mutex; // 注意：我们使用的是tokio的Mutex，它对异步代码友好
 
 use google_generative_ai_rs::v1::api::Client;
 
 
-struct StreamCtx<'a> {
-    pub skin: &'a MadSkin,
-    pub buffer: &'a String,
+struct StreamCtx {
+    pub skin:  MadSkin,
+    pub buffer: String,
 }
 
 async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
@@ -81,48 +84,69 @@ async fn run(matches: ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     }).await?;
 
 
-    let mut skin = MadSkin::default();
-    skin.bold.set_fg(Yellow);
-    skin.paragraph.set_fgbg(Magenta, rgb(30, 30, 40));
-    skin.italic.add_attr(Underlined);
 
     if is_rich {
         info!("output in markdown\n");
     }
 
-    let buffer = String::new();
 
     if is_stream {
         info!("streaming output");
         if let Some(stream_response) = response.streamed() {
             if let Some(json_stream) = stream_response.response_stream {
 
-            let holder = Arc::new(Mutex::new(StreamCtx {
-                skin: &skin,
-                buffer: &buffer,
-            }));
-            {
+                let skin: MadSkin = MadSkin::default();
 
-                Client::for_each_async(json_stream, move |gr: GeminiResponse| {
+                // skin.bold.set_fg(Yellow);
+                // skin.paragraph.set_fgbg(Magenta, rgb(30, 30, 40));
+                // skin.italic.add_attr(Underlined);
+                let holder = Arc::new(
+                    Mutex::new(StreamCtx {
+                        skin,
+                        buffer: String::new(),
+                    })
+                );
+
+                Client::for_each_async(
+                    json_stream, move |gr: GeminiResponse| {
                     let holder = Arc::clone(&holder);
-                    async move {
 
-                        if let Some(tx) = cli::get_text(&gr) {
+                    async move {
+                        if let Some(chunk) = cli::get_text(&gr) {
                             if is_rich {
-                                let holder = holder.lock().await;
-                                let skin = holder.skin;
-                                let _buffer = holder.buffer;
-                                skin.print_text(tx);
+                                let mut holder = holder.lock().await;
+
+                                //blocking code
+                                std::io::stdout()
+                                .execute(cursor::SavePosition).unwrap()
+                                .execute(Clear(FromCursorDown)).unwrap();
+
+                                let mut _buffer =  holder.buffer.clone();
+
+                                _buffer.push_str(chunk);
+                                let src: &str = _buffer.as_str();
+                                let skin : &MadSkin = & mut (holder.skin);
+
+                                let tx:FmtText = FmtText::from(&skin, src, None); 
+
+                                print!("{}", tx);
+                                std::io::stdout().flush().unwrap();
+                                holder.buffer = _buffer;
+                                // let _ = stdout().write_all(tx).await;
+                                // let _ = stdout().flush().await;
                             } else {
-                                let _ = stdout().write_all(tx.as_bytes()).await;
-                                let _ = stdout().flush().await;
+                                let _ = tokio::io::stdout().write_all(chunk.as_bytes()).await;
+                                let _ = tokio::io::stdout().flush().await;
 
                             }
                         }
                     }
                 })
-                .await
-            }
+                .await;
+
+                std::io::stdout().execute(cursor::RestorePosition).unwrap();
+                std::io::stdout().execute(cursor::Show).unwrap();
+
             }
         }
     } else if let Some(gemini) = response.rest() {
