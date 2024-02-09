@@ -8,10 +8,10 @@
   outputs = { self, nixpkgs, utils, naersk }:
   let
     systemBuildInputs = system: pkgs: {
-      ${system} = [ pkgs.iconv pkgs.openssl]  ++ 
-      (if pkgs.lib.strings.hasInfix "$system" "darwin"
-      then [ pkgs.darwin.apple_sdk.frameworks.Security pkgs.darwin.apple_sdk.frameworks.SystemConfiguration ]
-      else [ ]);
+      ${system} = with builtins; if ( match   ".*darwin" "${system}" != null) 
+      then [  pkgs.iconv pkgs.openssl pkgs.darwin.apple_sdk.frameworks.Security pkgs.darwin.apple_sdk.frameworks.SystemConfiguration ]
+      else [ pkgs.iconv pkgs.openssl]
+      ;
       };
   in
   utils.lib.eachDefaultSystem( system:
